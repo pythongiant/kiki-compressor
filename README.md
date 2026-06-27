@@ -85,6 +85,31 @@ Expected: it prints the original and compressed text and ends with
 
 ## Using it with Claude Desktop
 
+### Automatic install (recommended)
+
+From the project directory, run the installer for your OS:
+
+```bash
+# macOS / Linux
+./install_claude_desktop.sh
+
+# Windows (PowerShell)
+.\install_claude_desktop.ps1
+```
+
+It locates your Claude Desktop config, **backs it up**, and merges in a `kiki-compressor`
+entry pointing at the venv's Python — leaving any other MCP servers untouched. Useful flags
+(forwarded to `add_to_claude_desktop.py`):
+
+- `--dry-run` — print what it would write, change nothing
+- `--model-kind t5 --repo-dir ./attention_compressor` — install a token-level backend instead
+- `--name`, `--model`, `--window`, `--device` — override individual settings
+- `--help` — full list
+
+Restart Claude Desktop afterwards for the `compress_context` tool to appear.
+
+### Manual install
+
 Add the server to your `claude_desktop_config.json`:
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -174,13 +199,63 @@ All configuration is via environment variables (set them in the MCP config `env`
 
 ## Optional: token-level QUITO / QUITO-X backends
 
+The token-level backends live in the [`attention_compressor`](https://github.com/Wenshansilvia/attention_compressor)
+**git submodule**. After cloning this repo, fetch it with:
+
 ```bash
-git clone https://github.com/Wenshansilvia/attention_compressor.git
+git submodule update --init
 ```
 
-Then in the MCP config `env` block set `QUITO_MODEL_KIND` to `t5` or `causal` and
-`QUITO_REPO_DIR` to the absolute path of the clone. `server.py` patches a known bug in the
-upstream repo at runtime, so no edits to the clone are needed.
+(If you're setting it up fresh outside this repo, a plain
+`git clone https://github.com/Wenshansilvia/attention_compressor.git` works too.)
+
+Then in the MCP config `env` block set `QUITO_MODEL_KIND` to `t5` or `causal` and, if needed,
+`QUITO_REPO_DIR` to the absolute path of the submodule. `server.py` patches a known bug in the
+upstream repo at runtime, so no edits to the submodule are needed. The installer can do this
+for you: `./install_claude_desktop.sh --model-kind t5 --repo-dir ./attention_compressor`.
+
+---
+
+## Benchmarks (from the QUITO / QUITO-X papers)
+
+These results are **reported by the original authors** for the token-level QUITO / QUITO-X
+methods — i.e. kiki-compressor's optional `t5` and `causal` backends. They are *not* measured on
+the default cross-encoder reranker backend, and the downstream readers / datasets differ from
+paper to paper. Numbers are reproduced here for context; see the papers for full tables and
+setup.
+
+### QUITO — [CCIR 2024](https://arxiv.org/abs/2408.00274)
+
+Query attention from a **0.5B** model (`Qwen2-0.5B-Instruct`) prunes the context — versus
+baselines that lean on 7–13B compressors. Downstream reader: `Longchat-13B-16k`.
+
+**NaturalQuestions (accuracy, ↑):**
+
+| Compression | Selective-Context | LLMLingua | LongLLMLingua | **QUITO** |
+|-------------|:-----------------:|:---------:|:-------------:|:---------:|
+| 2×          | 53.2              | 38.7      | 41.2          | **58.9**  |
+| 4×          | 38.2              | 32.1      | 33.6          | **50.7**  |
+
+On **ASQA** at 2× compression, QUITO (dynamic sentence level) reports **40.0 EM / 23.8 DisambigF1**,
+ahead of the same baselines. The headline: a 0.5B query-guided filter beats much larger
+self-information / perplexity compressors, and the gap *widens* at higher compression (4×).
+
+### QUITO-X — [EMNLP 2025 Findings](https://arxiv.org/abs/2408.10497)
+
+Reframes compression as an **Information Bottleneck** problem and scores tokens with the
+**cross-attention of a 60M `FLAN-T5-small`** encoder–decoder. Evaluated on **CoQA, Quoref, DROP,
+SQuAD** against Selective-Context (GPT-2 124M), LLMLingua / LongLLMLingua (Llama-2-7B),
+LLMLingua2 (XLM-RoBERTa-large 355M), and QUITO (Qwen2-0.5B).
+
+- **~25% higher compression rate** than the prior state of the art at matched QA quality — using
+  a model orders of magnitude smaller than the 7B baselines.
+- The authors report that the compressed context can **match or even exceed the full (uncompressed)
+  context** in some settings. Even at an aggressive **0.25 retention**, it preserves most of the
+  full-context score — e.g. with LLaMA3-8B as reader, Quoref **86.8** (vs **93.1** full context) and
+  CoQA **75.5** (vs **79.3** full context).
+
+> Caveat: exact cell values above were extracted from the published papers/tables; treat them as
+> indicative and consult the source PDFs for the authoritative, complete results.
 
 ---
 
@@ -188,14 +263,35 @@ upstream repo at runtime, so no edits to the clone are needed.
 
 ```
 context-compressor-mcp/
-├── server.py                # MCP server: the compress_context tool + backend dispatch
-├── reranker_compressor.py   # RerankerCompressor (default cross-encoder backend)
-├── test_smoke.py            # quick end-to-end sanity check
+├── server.py                  # MCP server: the compress_context tool + backend dispatch
+├── reranker_compressor.py     # RerankerCompressor (default cross-encoder backend)
+├── test_smoke.py              # quick end-to-end sanity check
+├── add_to_claude_desktop.py   # cross-platform Claude Desktop installer (does the work)
+├── install_claude_desktop.sh  # macOS/Linux installer wrapper
+├── install_claude_desktop.ps1 # Windows installer wrapper
 ├── README.md
-└── attention_compressor/    # optional QUITO-X clone (t5/causal backends)
+└── attention_compressor/      # QUITO/QUITO-X submodule (optional t5/causal backends)
 ```
 
 ## Credits
 
-The token-level backends wrap [QUITO / QUITO-X](https://github.com/Wenshansilvia/attention_compressor).
-The reranker backend uses [sentence-transformers](https://www.sbert.net/) cross-encoders.
+The token-level backends wrap [QUITO / QUITO-X](https://github.com/Wenshansilvia/attention_compressor)
+(Wang et al.). The reranker backend uses [sentence-transformers](https://www.sbert.net/) cross-encoders.
+
+If you use the token-level backends, please cite the original work:
+
+```bibtex
+@article{wang2024quito,
+  author  = {Wang, Wenshan and Wang, Yihang and Fan, Yixing and Liao, Huaming and Guo, Jiafeng},
+  title   = {QUITO: Accelerating Long-Context Reasoning through Query-Guided Context Compression},
+  journal = {arXiv preprint arXiv:2408.00274},
+  year    = {2024}
+}
+
+@article{wang2024quitox,
+  author  = {Wang, Yihang and Huang, Xu and Tian, Bowen and Su, Yueyang and Yu, Lei and Liao, Huaming and Fan, Yixing and Guo, Jiafeng and Cheng, Xueqi},
+  title   = {QUITO-X: A New Perspective on Context Compression from the Information Bottleneck Theory},
+  journal = {arXiv preprint arXiv:2408.10497},
+  year    = {2024}
+}
+```

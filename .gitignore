@@ -4,7 +4,6 @@
 # Vendored third-party clone for the optional t5/causal backends.
 # Re-create with: git clone https://github.com/Wenshansilvia/attention_compressor.git
 # (or convert to a submodule — see notes)
-attention_compressor/
 
 # Python caches
 __pycache__/
