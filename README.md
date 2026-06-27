@@ -169,11 +169,14 @@ The server speaks stdio by default. For a remote/multi-client deployment, swap `
 
 The bundled skill ([`skills/compress-and-answer`](skills/compress-and-answer/SKILL.md), installed
 by the script above) tells the assistant to reach for the compressor on **any** query — not only
-when you paste a document. It encodes the **gather → compress → answer** pattern:
+when you paste a document — and to use it **first**, so that subsequent thinking runs over the
+trimmed extract. It encodes the **gather → compress → reason → answer** pattern:
 
 1. **Gather** source text for the query (the conversation, files, or a fresh web search / fetch).
-2. **Compress** it: `compress_context(doc=<gathered text>, query=<question>)`.
-3. **Answer** from the trimmed result.
+2. **Compress it first**: `compress_context(doc=<gathered text>, query=<question>)` — before any
+   extended analysis.
+3. **Reason** over the *compressed* extract; carry it forward, leave the raw material behind.
+4. **Answer** from the reduced context.
 
 This matters because the tool is **extractive** — it can only shrink text you give it, so it can't
 answer from an empty `doc`. The skill makes "use it for everything" actually work by gathering

@@ -1,23 +1,27 @@
 ---
 name: compress-and-answer
 description: >-
-  Ground the answer to ANY substantive query through the kiki-compressor MCP tool
-  (compress_context). Don't wait for the user to paste a document: gather the relevant source
-  text first — earlier conversation, files, or fresh web-search / fetch results — then compress
-  it to the query and answer from the trimmed context. Use it whenever an answer should be
-  grounded in source material, including "tell me more", "look into X", or any open question,
-  as well as the obvious case where the user supplies a long document to condense.
+  Before reasoning over a body of source material, run it through the kiki-compressor MCP tool
+  (compress_context) FIRST so your thinking happens over the trimmed, query-relevant extract
+  instead of the full text. The pattern for ANY substantive query is gather → compress → reason →
+  answer: pull the relevant source (earlier conversation, files, or fresh web-search / fetch
+  results), compress it to the query, then think and answer from the reduced context. Applies to
+  "tell me more", "look into X", any open question, and the obvious case of a long pasted document.
 ---
 
 # Compress and answer
 
-Default to grounding answers with the **kiki-compressor** MCP server's `compress_context` tool.
-The pattern is **gather → compress → answer**:
+Default to grounding answers with the **kiki-compressor** MCP server's `compress_context` tool,
+and reach for it **early** — compress the source *before* you reason over it, not after. The
+pattern is **gather → compress → reason → answer**:
 
 1. **Gather** the source text relevant to the query — from the conversation so far, attached
    files, or a fresh web search / page fetch if you don't already have material.
-2. **Compress** it: call `compress_context(doc=<gathered text>, query=<the user's question>)`.
-3. **Answer** from the trimmed result.
+2. **Compress it FIRST**: call `compress_context(doc=<gathered text>, query=<the user's question>)`
+   as the first move after gathering, before any extended analysis.
+3. **Reason** over the *compressed* extract — carry the trimmed text forward into your thinking,
+   follow-up tool calls, and any notes you persist; leave the raw gathered material behind.
+4. **Answer** from that reduced context.
 
 > Tool name: in Claude Desktop it appears as `compress_context` under the kiki-compressor
 > server. In Claude Code the fully-qualified name is `mcp__kiki-compressor__compress_context`.
@@ -31,6 +35,12 @@ then compress that to the question.
 
 If there is genuinely no source to gather (a greeting, a pure arithmetic/parametric fact you'll
 just state), there is nothing to compress — answer directly and skip the tool.
+
+**Compress first, then think.** Running the tool early is the whole point: it reduces the context
+your *subsequent* reasoning operates on. Once you have the trimmed extract, reason and answer from
+it rather than re-reading the full gathered material. In a multi-step or agentic flow, the raw
+`doc` you passed in can be dropped from what you carry forward, so every later step — more
+thinking, more tool calls, a saved note — works on fewer tokens.
 
 ## How to call it
 
@@ -59,6 +69,8 @@ go back to step 1, collect material, and try again.
 
 ## Good to know
 
-- It reduces **input** context, not the model's output. Within one chat, compressing text the
-  model has already read doesn't save that turn's tokens — the value is a focused, grounded
-  answer and a clean extract you can reuse downstream.
+- It reduces **input** context, not the model's output (output length is up to the model).
+- The full `doc` you pass into the call is still in that one turn's context — compressing text
+  already in view doesn't refund that turn. The savings are **forward-looking**: by compressing
+  first and reasoning over the result, every step after the compress call carries the smaller
+  extract instead of the raw material.
