@@ -18,10 +18,17 @@ import threading
 import anyio
 from mcp.server.fastmcp import FastMCP
 
-# Make the cloned repo + local modules importable
-REPO_DIR = os.environ.get("QUITO_REPO_DIR", os.path.dirname(os.path.abspath(__file__)))
-if REPO_DIR not in sys.path:
-    sys.path.insert(0, REPO_DIR)
+# Make local modules + the quito package importable.
+#   - HERE holds reranker_compressor.py and the bundled `attention_compressor` submodule.
+#   - The `quito` package (t5/causal backends) lives INSIDE attention_compressor/, so that
+#     subdir must be on sys.path — add it automatically when the submodule is checked out,
+#     so the t5/causal backends work without anyone setting QUITO_REPO_DIR.
+#   - QUITO_REPO_DIR still overrides with an external clone of the repo if set.
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_DIR = os.environ.get("QUITO_REPO_DIR", HERE)
+for _p in (HERE, os.path.join(HERE, "attention_compressor"), REPO_DIR):
+    if os.path.isdir(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
 
 MODEL_KIND = os.environ.get("QUITO_MODEL_KIND", "reranker").lower()   # reranker | t5 | causal
 SIGMA = float(os.environ.get("QUITO_SIGMA", "1.0"))
@@ -32,12 +39,12 @@ TRUST_REMOTE = os.environ.get("QUITO_TRUST_REMOTE_CODE", "").lower() in ("1", "t
 
 def _default_ratio() -> float:
     """Default keep-ratio for compress_context, from QUITO_RATIO (fraction to KEEP, (0,1]).
-    Falls back to 0.25 if unset, unparseable, or out of range."""
+    Falls back to 0.5 if unset, unparseable, or out of range."""
     try:
-        r = float(os.environ.get("QUITO_RATIO", "0.25"))
+        r = float(os.environ.get("QUITO_RATIO", "0.5"))
     except ValueError:
-        return 0.25
-    return r if 0 < r <= 1 else 0.25
+        return 0.5
+    return r if 0 < r <= 1 else 0.5
 
 
 DEFAULT_RATIO = _default_ratio()
@@ -152,7 +159,7 @@ async def compress_context(
         doc: The source text to focus — any gathered context; the more there is, the more it helps.
         query: The question/instruction the kept text must still answer.
         ratio: Fraction of tokens to KEEP, in (0, 1]. 0.3 keeps ~30%. Lower is more aggressive.
-               Omit it to use the server default (env QUITO_RATIO, default 0.25).
+               Omit it to use the server default (env QUITO_RATIO, default 0.5).
         level: Only used by the t5/causal backends:
                "phrase" (token level), "sentence" (whole salient sentences),
                "dynamic" (sentences + a partial trailing sentence).

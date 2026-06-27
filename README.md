@@ -151,7 +151,7 @@ Add the server to your `claude_desktop_config.json`:
         "QUITO_MODEL_KIND": "reranker",
         "QUITO_MODEL": "cross-encoder/ms-marco-MiniLM-L-6-v2",
         "QUITO_RERANK_WINDOW": "1",
-        "QUITO_RATIO": "0.25"
+        "QUITO_RATIO": "0.5"
       }
     }
   }
@@ -197,7 +197,7 @@ compress_context(doc, query, ratio=0.5, level="phrase") -> str
 |----------|---------|------------|--------------------------------------------------------------------|
 | `doc`    | str     | —          | The source text to trim — any context you'd otherwise send in full.|
 | `query`  | str     | —          | The question the compressed context must still answer.             |
-| `ratio`  | float   | `QUITO_RATIO` (0.25) | Fraction of tokens to **keep**, in `(0, 1]`. `0.3` ≈ keep 30%. Omit to use the server default. |
+| `ratio`  | float   | `QUITO_RATIO` (0.5) | Fraction of tokens to **keep**, in `(0, 1]`. `0.3` ≈ keep 30%. Omit to use the server default. |
 | `level`  | str     | `"phrase"` | `phrase` \| `sentence` \| `dynamic`. Only used by `t5`/`causal`; the reranker ignores it. |
 
 It returns the compressed text plus a footer, e.g.:
@@ -230,9 +230,9 @@ All configuration is via environment variables (set them in the MCP config `env`
 
 | Variable                  | Default                                | Notes                                                       |
 |---------------------------|----------------------------------------|-------------------------------------------------------------|
-| `QUITO_MODEL_KIND`        | `t5`                             | `reranker` \| `t5` \| `causal`.                             |
+| `QUITO_MODEL_KIND`        | `reranker`                             | `reranker` \| `t5` \| `causal`.                             |
 | `QUITO_MODEL`             | per-kind default (see table above)     | Any HuggingFace model id.                                   |
-| `QUITO_RATIO`             | `0.25`                                 | Default fraction of tokens to KEEP, `(0, 1]`, when `compress_context` is called without an explicit `ratio`. |
+| `QUITO_RATIO`             | `0.5`                                  | Default fraction of tokens to KEEP, `(0, 1]`, when `compress_context` is called without an explicit `ratio`. |
 | `QUITO_RERANK_WINDOW`     | `1`                                    | Sentences per scored unit (`1` = pure sentence).            |
 | `QUITO_DEVICE`            | auto                                   | `cuda` / `mps` / `cpu`.                                     |
 | `QUITO_TRUST_REMOTE_CODE` | `false`                                | Needed by some custom rerankers (e.g. jina-reranker-v2).    |
@@ -259,10 +259,12 @@ git submodule update --init
 (If you're setting it up fresh outside this repo, a plain
 `git clone https://github.com/Wenshansilvia/attention_compressor.git` works too.)
 
-Then in the MCP config `env` block set `QUITO_MODEL_KIND` to `t5` or `causal` and, if needed,
-`QUITO_REPO_DIR` to the absolute path of the submodule. `server.py` patches a known bug in the
-upstream repo at runtime, so no edits to the submodule are needed. The installer can do this
-for you: `./install_claude_desktop.sh --model-kind t5 --repo-dir ./attention_compressor`.
+Then in the MCP config `env` block just set `QUITO_MODEL_KIND` to `t5` or `causal`. **`server.py`
+auto-adds the bundled `attention_compressor/` submodule to the import path**, so you do *not* need
+`QUITO_REPO_DIR` when the submodule is checked out next to `server.py` — set it only to point at an
+external clone elsewhere. `server.py` also patches a known bug in the upstream repo at runtime, so
+no edits to the submodule are needed. The installer can configure this for you:
+`./install_claude_desktop.sh --model-kind t5` (optionally `--repo-dir /path/to/external/clone`).
 
 ---
 
