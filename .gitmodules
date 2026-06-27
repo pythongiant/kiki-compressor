@@ -1,0 +1,3 @@
+[submodule "attention_compressor"]
+	path = attention_compressor
+	url = https://github.com/Wenshansilvia/attention_compressor.git
