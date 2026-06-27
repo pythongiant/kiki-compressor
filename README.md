@@ -97,21 +97,29 @@ From the project directory, run the installer for your OS:
 .\install_claude_desktop.ps1
 ```
 
-It locates your Claude Desktop config, **backs it up**, merges in a `kiki-compressor` entry
-pointing at the venv's Python (leaving other MCP servers untouched), **and installs the
-[`compress-and-answer`](#the-compress-and-answer-skill) skill** to `~/.claude/skills`. Useful
-flags (forwarded to `add_to_claude_desktop.py`):
+By default the installer sets up **all three** targets:
+
+1. **Claude Desktop** — backs up your config and merges in a `kiki-compressor` entry pointing at
+   the venv's Python (other MCP servers untouched).
+2. **Claude Code** — registers the same server via the `claude` CLI (`mcp add-json`, user scope,
+   so it's available in every project).
+3. **The [`compress-and-answer`](#the-compress-and-answer-skill) skill** — copied to
+   `~/.claude/skills` (read by Claude Code).
+
+Useful flags (forwarded to `add_to_claude_desktop.py`):
 
 - `--dry-run` — print what it would do, change nothing
-- `--no-skill` — install the MCP config only, skip the skill
+- `--no-desktop` / `--no-claude-code` / `--no-skill` — skip any target
+- `--claude-code-scope local|user|project` — Claude Code config scope (default `user`)
 - `--skills-dir PATH` — install the skill somewhere other than `~/.claude/skills`
 - `--model-kind t5 --repo-dir ./attention_compressor` — install a token-level backend instead
 - `--name`, `--model`, `--window`, `--device` — override individual settings
 - `--help` — full list
 
-Restart Claude Desktop afterwards for the `compress_context` tool to appear. `~/.claude/skills`
-is read by **Claude Code**; for **Claude Desktop** also add the skill via
-Settings → Capabilities/Skills, pointing at `skills/compress-and-answer`.
+Afterwards: **restart Claude Desktop**, and in **Claude Code** reconnect MCP (`/mcp`, or restart)
+for the `compress_context` tool to load. The skill lands in `~/.claude/skills` (read by Claude
+Code); for **Claude Desktop**, also add it via Settings → Capabilities/Skills, pointing at
+`skills/compress-and-answer`.
 
 ### Manual install
 
