@@ -12,9 +12,10 @@ Usage:
 
 Common options:
     --name NAME           server key in the config        (default: kiki-compressor)
-    --model-kind KIND     reranker | t5 | causal          (default: reranker)
-    --model ID            HuggingFace model id            (default: MiniLM reranker)
+    --model-kind KIND     reranker | t5 | causal          (default: t5)
+    --model ID            HuggingFace model id            (default: per model-kind)
     --window N            sentences per scored unit        (default: 1)
+    --ratio R             default keep-ratio, (0,1]        (default: 0.25)
     --repo-dir PATH       attention_compressor path (t5/causal backends)
     --device DEV          cuda | mps | cpu                 (default: auto)
     --dry-run             print what would be written, change nothing
@@ -126,9 +127,11 @@ def load_config(path: str) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description="Install kiki-compressor into Claude Desktop.")
     p.add_argument("--name", default="kiki-compressor")
-    p.add_argument("--model-kind", default="reranker", choices=["reranker", "t5", "causal"])
+    p.add_argument("--model-kind", default="t5", choices=["reranker", "t5", "causal"])
     p.add_argument("--model", default=None)
     p.add_argument("--window", default="1")
+    p.add_argument("--ratio", default="0.25",
+                   help="default keep-ratio for compress_context, (0,1] (QUITO_RATIO; default 0.25)")
     p.add_argument("--repo-dir", default=None)
     p.add_argument("--device", default=None)
     p.add_argument("--config", default=None, help="override Claude Desktop config path")
@@ -163,6 +166,7 @@ def main() -> int:
         "QUITO_MODEL_KIND": args.model_kind,
         "QUITO_MODEL": model,
         "QUITO_RERANK_WINDOW": str(args.window),
+        "QUITO_RATIO": str(args.ratio),
     }
     if args.repo_dir:
         env["QUITO_REPO_DIR"] = os.path.abspath(args.repo_dir)

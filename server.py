@@ -29,6 +29,19 @@ RERANK_WINDOW = int(os.environ.get("QUITO_RERANK_WINDOW", "1"))
 DEVICE = os.environ.get("QUITO_DEVICE") or None
 TRUST_REMOTE = os.environ.get("QUITO_TRUST_REMOTE_CODE", "").lower() in ("1", "true", "yes")
 
+
+def _default_ratio() -> float:
+    """Default keep-ratio for compress_context, from QUITO_RATIO (fraction to KEEP, (0,1]).
+    Falls back to 0.25 if unset, unparseable, or out of range."""
+    try:
+        r = float(os.environ.get("QUITO_RATIO", "0.25"))
+    except ValueError:
+        return 0.25
+    return r if 0 < r <= 1 else 0.25
+
+
+DEFAULT_RATIO = _default_ratio()
+
 _DEFAULT_MODEL = {
     "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2",
     "t5": "google/flan-t5-base",
@@ -119,7 +132,7 @@ mcp = FastMCP("context-compressor")
 async def compress_context(
     doc: str,
     query: str,
-    ratio: float = 0.5,
+    ratio: float = DEFAULT_RATIO,
     level: str = "phrase",
 ) -> str:
     """Focus a body of source text on a query: keep only the parts relevant to `query` and
@@ -139,6 +152,7 @@ async def compress_context(
         doc: The source text to focus — any gathered context; the more there is, the more it helps.
         query: The question/instruction the kept text must still answer.
         ratio: Fraction of tokens to KEEP, in (0, 1]. 0.3 keeps ~30%. Lower is more aggressive.
+               Omit it to use the server default (env QUITO_RATIO, default 0.25).
         level: Only used by the t5/causal backends:
                "phrase" (token level), "sentence" (whole salient sentences),
                "dynamic" (sentences + a partial trailing sentence).
