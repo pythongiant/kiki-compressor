@@ -1,24 +1,35 @@
 # kiki-compressor
 
-**Query-guided context compression, served over MCP.**
+**Query-guided context compression — pay for the tokens that matter, drop the rest.**
 
 `kiki-compressor` is a local [Model Context Protocol](https://modelcontextprotocol.io) server
-that shrinks a long document down to just the parts relevant to a question. Give it a `doc`,
-a `query`, and a `ratio`, and it returns a compressed version of the document that still
-answers the query — so you can fit more useful signal into a model's context window and spend
-fewer tokens on noise.
+that cuts how many tokens you feed a model. Hand it a body of text (`doc`), the `query` it has to
+serve, and how much to keep (`ratio`); it returns only the query-relevant slice — usually a small
+fraction of the original token count, with the answer still recoverable. Fewer input tokens means
+**lower cost, more headroom in the context window, and less noise diluting attention**.
 
-It exposes a single tool, `compress_context`, that any MCP client (Claude Desktop, etc.) can
-call.
+It exposes a single tool, `compress_context`, that any MCP client (Claude Desktop, Claude Code,
+…) can call.
 
 ---
 
-## Why
+## What it saves (and what it doesn't)
 
-Long contexts are expensive and dilute attention. Most of a retrieved document is usually
-irrelevant to the specific question being asked. `kiki-compressor` does **query-aware** pruning:
-instead of a generic summary, it keeps the spans that matter *for this query* and drops the rest,
-preserving original wording and order.
+Input tokens are the cost you control. A retrieved document, a transcript, a wall of search
+results — you pay for every token and it crowds your context window, yet most of it is irrelevant
+to the question at hand. `kiki-compressor` does **query-aware** pruning: it keeps the spans that
+matter *for this query* and drops the rest, so the text you send onward is a fraction of the size.
+`ratio` is the dial — keep `0.3` and you send ~70% fewer context tokens.
+
+Be precise about where the savings land:
+
+- **It cuts input / context tokens** — what you send *into* a model — **not** the model's generated
+  output. Output length is up to the model.
+- **The savings are real when the compressed text is forwarded to a model**: RAG prompts, agent
+  loops, summarize-then-reason pipelines, stuffing retrieved chunks into a request. Compressing
+  text a model *already* read in the same turn doesn't refund that turn — there the payoff is focus
+  and a smaller artifact to reuse downstream.
+- **It is extractive**, so the kept tokens are verbatim — never paraphrased or hallucinated.
 
 ## How it works
 
@@ -27,10 +38,12 @@ with a single relevance number, so compression happens at the **sentence / passa
 
 1. Split the document into sentences (NLTK `punkt`), optionally grouped into N-sentence windows.
 2. Score every unit against the query with the cross-encoder.
-3. Greedily keep the highest-scoring units up to a token budget (`ratio` × total tokens).
+3. Greedily keep the highest-scoring units up to a **token budget** (`ratio` × total tokens) — the
+   budget *is* the token target, so the output lands at roughly `ratio` × the original size.
 4. Re-emit the kept units **in their original order**.
 
-The result is verbatim, query-relevant text — never paraphrased or hallucinated.
+The kept text is verbatim and query-relevant — never paraphrased or hallucinated — and the tool's
+footer reports the exact before → after token counts so you can see the saving.
 
 ### Backends
 
@@ -178,7 +191,7 @@ compress_context(doc, query, ratio=0.5, level="phrase") -> str
 
 | Argument | Type    | Default    | Meaning                                                            |
 |----------|---------|------------|--------------------------------------------------------------------|
-| `doc`    | str     | —          | The long context to compress.                                      |
+| `doc`    | str     | —          | The source text to trim — any context you'd otherwise send in full.|
 | `query`  | str     | —          | The question the compressed context must still answer.             |
 | `ratio`  | float   | `0.5`      | Fraction of tokens to **keep**, in `(0, 1]`. `0.3` ≈ keep 30%.     |
 | `level`  | str     | `"phrase"` | `phrase` \| `sentence` \| `dynamic`. Only used by `t5`/`causal`; the reranker ignores it. |
@@ -202,7 +215,8 @@ The tower stands 330 meters tall. Gustave Eiffel's company designed and built th
 >
 > **→** *"The tower stands 330 meters tall. Gustave Eiffel's company designed and built the tower."*
 
-The bananas, favorite color, and cats are dropped; the two query-relevant facts survive.
+The bananas, favorite color, and cats are dropped; the two query-relevant facts survive — and the
+context you'd forward is **64% smaller** in tokens (36% kept) for that query.
 
 ---
 
@@ -249,11 +263,11 @@ for you: `./install_claude_desktop.sh --model-kind t5 --repo-dir ./attention_com
 
 ## Benchmarks (from the QUITO / QUITO-X papers)
 
-These results are **reported by the original authors** for the token-level QUITO / QUITO-X
-methods — i.e. kiki-compressor's optional `t5` and `causal` backends. They are *not* measured on
-the default cross-encoder reranker backend, and the downstream readers / datasets differ from
-paper to paper. Numbers are reproduced here for context; see the papers for full tables and
-setup.
+Read these through the token lens: **how few tokens can you keep before answer quality drops?**
+They are **reported by the original authors** for the token-level QUITO / QUITO-X methods — i.e.
+kiki-compressor's optional `t5` and `causal` backends, *not* the default reranker — and the
+downstream readers / datasets differ from paper to paper. Reproduced here for context; see the
+papers for full tables and setup.
 
 ### QUITO — [CCIR 2024](https://arxiv.org/abs/2408.00274)
 
@@ -267,9 +281,10 @@ baselines that lean on 7–13B compressors. Downstream reader: `Longchat-13B-16k
 | 2×          | 53.2              | 38.7      | 41.2          | **58.9**  |
 | 4×          | 38.2              | 32.1      | 33.6          | **50.7**  |
 
-On **ASQA** at 2× compression, QUITO (dynamic sentence level) reports **40.0 EM / 23.8 DisambigF1**,
-ahead of the same baselines. The headline: a 0.5B query-guided filter beats much larger
-self-information / perplexity compressors, and the gap *widens* at higher compression (4×).
+(2× compression = keep ~half the tokens; 4× = keep ~a quarter.) On **ASQA** at 2×, QUITO (dynamic
+sentence level) reports **40.0 EM / 23.8 DisambigF1**, ahead of the same baselines. The headline:
+a 0.5B query-guided filter holds quality while dropping the most tokens — and its edge *widens* as
+you cut deeper (4×), exactly where token savings matter most.
 
 ### QUITO-X — [EMNLP 2025 Findings](https://arxiv.org/abs/2408.10497)
 
@@ -278,8 +293,9 @@ Reframes compression as an **Information Bottleneck** problem and scores tokens 
 SQuAD** against Selective-Context (GPT-2 124M), LLMLingua / LongLLMLingua (Llama-2-7B),
 LLMLingua2 (XLM-RoBERTa-large 355M), and QUITO (Qwen2-0.5B).
 
-- **~25% higher compression rate** than the prior state of the art at matched QA quality — using
-  a model orders of magnitude smaller than the 7B baselines.
+- **~25% more compression** than the prior state of the art at matched QA quality — i.e. it keeps
+  meaningfully fewer tokens for the same answers, using a model orders of magnitude smaller than
+  the 7B baselines.
 - The authors report that the compressed context can **match or even exceed the full (uncompressed)
   context** in some settings. Even at an aggressive **0.25 retention**, it preserves most of the
   full-context score — e.g. with LLaMA3-8B as reader, Quoref **86.8** (vs **93.1** full context) and
