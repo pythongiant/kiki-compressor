@@ -97,16 +97,21 @@ From the project directory, run the installer for your OS:
 .\install_claude_desktop.ps1
 ```
 
-It locates your Claude Desktop config, **backs it up**, and merges in a `kiki-compressor`
-entry pointing at the venv's Python — leaving any other MCP servers untouched. Useful flags
-(forwarded to `add_to_claude_desktop.py`):
+It locates your Claude Desktop config, **backs it up**, merges in a `kiki-compressor` entry
+pointing at the venv's Python (leaving other MCP servers untouched), **and installs the
+[`compress-and-answer`](#the-compress-and-answer-skill) skill** to `~/.claude/skills`. Useful
+flags (forwarded to `add_to_claude_desktop.py`):
 
-- `--dry-run` — print what it would write, change nothing
+- `--dry-run` — print what it would do, change nothing
+- `--no-skill` — install the MCP config only, skip the skill
+- `--skills-dir PATH` — install the skill somewhere other than `~/.claude/skills`
 - `--model-kind t5 --repo-dir ./attention_compressor` — install a token-level backend instead
 - `--name`, `--model`, `--window`, `--device` — override individual settings
 - `--help` — full list
 
-Restart Claude Desktop afterwards for the `compress_context` tool to appear.
+Restart Claude Desktop afterwards for the `compress_context` tool to appear. `~/.claude/skills`
+is read by **Claude Code**; for **Claude Desktop** also add the skill via
+Settings → Capabilities/Skills, pointing at `skills/compress-and-answer`.
 
 ### Manual install
 
@@ -136,6 +141,24 @@ Add the server to your `claude_desktop_config.json`:
 
 The server speaks stdio by default. For a remote/multi-client deployment, swap `mcp.run()` for
 `mcp.run(transport="streamable-http")` in `server.py`.
+
+---
+
+## The compress-and-answer skill
+
+The bundled skill ([`skills/compress-and-answer`](skills/compress-and-answer/SKILL.md), installed
+by the script above) tells the assistant to reach for the compressor on **any** query — not only
+when you paste a document. It encodes the **gather → compress → answer** pattern:
+
+1. **Gather** source text for the query (the conversation, files, or a fresh web search / fetch).
+2. **Compress** it: `compress_context(doc=<gathered text>, query=<question>)`.
+3. **Answer** from the trimmed result.
+
+This matters because the tool is **extractive** — it can only shrink text you give it, so it can't
+answer from an empty `doc`. The skill makes "use it for everything" actually work by gathering
+material first. (If there's genuinely nothing to gather — a greeting, a bare arithmetic fact — the
+skill says to answer directly.) A skill biases the model toward this; it's guidance, not a hard
+switch. For guaranteed compression on every call, invoke the tool/script programmatically instead.
 
 ---
 
@@ -269,6 +292,8 @@ context-compressor-mcp/
 ├── add_to_claude_desktop.py   # cross-platform Claude Desktop installer (does the work)
 ├── install_claude_desktop.sh  # macOS/Linux installer wrapper
 ├── install_claude_desktop.ps1 # Windows installer wrapper
+├── skills/                    # optional "compress-and-answer" Claude skill
+│   └── compress-and-answer/SKILL.md
 ├── README.md
 └── attention_compressor/      # QUITO/QUITO-X submodule (optional t5/causal backends)
 ```

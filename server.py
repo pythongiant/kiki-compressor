@@ -122,18 +122,32 @@ async def compress_context(
     ratio: float = 0.5,
     level: str = "phrase",
 ) -> str:
-    """Compress a document down to the parts most relevant to a query. Returns the
-    compressed text with a token-count footer.
+    """Focus a body of source text on a query: keep only the parts relevant to `query` and
+    drop the rest. Returns the trimmed text (verbatim extracts, in original order) with a
+    token-count footer.
+
+    Use this to ground the answer to ANY query, not just when the user pastes a document.
+    `doc` can be a pasted document, retrieved web-search / fetch results, file contents, search
+    hits, or earlier conversation you want to focus. The general pattern is:
+        gather relevant text  ->  compress_context(that text, the question)  ->  answer from it.
+
+    This is an EXTRACTIVE filter, not a generator: it can only shrink text you give it, so `doc`
+    must contain the source material. It cannot answer a question from nothing — if you have no
+    source yet, gather some first (e.g. a web search) and pass it as `doc`.
 
     Args:
-        doc: The long context to compress.
-        query: The question/instruction the compressed context must still answer.
+        doc: The source text to focus — any gathered context; the more there is, the more it helps.
+        query: The question/instruction the kept text must still answer.
         ratio: Fraction of tokens to KEEP, in (0, 1]. 0.3 keeps ~30%. Lower is more aggressive.
         level: Only used by the t5/causal backends:
                "phrase" (token level), "sentence" (whole salient sentences),
                "dynamic" (sentences + a partial trailing sentence).
                The reranker backend always works at sentence/passage level and ignores this.
     """
+    if not doc or not doc.strip():
+        return ("compress_context needs source text in `doc` — it focuses existing material on a "
+                "query, it does not generate answers. Gather the relevant text first (web results, "
+                "a file, a pasted document, or earlier context) and pass it as `doc`.")
     if not 0 < ratio <= 1:
         return "Error: ratio must be in (0, 1]."
     if level not in ("phrase", "sentence", "dynamic"):

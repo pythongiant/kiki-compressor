@@ -1,9 +1,11 @@
 <#
 .SYNOPSIS
   Add kiki-compressor to your Claude Desktop config (Windows).
+  Also installs the "compress-and-answer" skill to ~/.claude/skills (use --no-skill to skip).
 .EXAMPLE
   ./install_claude_desktop.ps1
-  ./install_claude_desktop.ps1 -DryRun            # (or: --dry-run)
+  ./install_claude_desktop.ps1 --dry-run          # preview, change nothing
+  ./install_claude_desktop.ps1 --no-skill         # config only, no skill
   ./install_claude_desktop.ps1 --model-kind t5 --repo-dir .\attention_compressor
 .NOTES
   All arguments are forwarded to add_to_claude_desktop.py (run with --help to see them).

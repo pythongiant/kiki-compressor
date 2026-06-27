@@ -41,6 +41,27 @@ def venv_python() -> str:
     return os.path.join(PROJECT_DIR, ".venv", "bin", "python")
 
 
+def default_skills_dir() -> str:
+    # Claude Code / Agent Skills location (cross-platform).
+    return os.path.expanduser(os.path.join("~", ".claude", "skills"))
+
+
+def install_skill(skills_dir: str, dry_run: bool):
+    """Copy the bundled compress-and-answer skill into a skills directory."""
+    src = os.path.join(PROJECT_DIR, "skills", "compress-and-answer")
+    if not os.path.isdir(src):
+        print(f"!! skill source not found at {src} — skipping skill install.")
+        return None
+    dst = os.path.join(skills_dir, "compress-and-answer")
+    if dry_run:
+        print(f"[dry-run] would install skill 'compress-and-answer' -> {dst}")
+        return dst
+    os.makedirs(skills_dir, exist_ok=True)
+    shutil.copytree(src, dst, dirs_exist_ok=True)
+    print(f"Installed skill 'compress-and-answer' -> {dst}")
+    return dst
+
+
 def config_path() -> str:
     system = platform.system()
     if system == "Windows":
@@ -84,6 +105,10 @@ def main() -> int:
     p.add_argument("--repo-dir", default=None)
     p.add_argument("--device", default=None)
     p.add_argument("--config", default=None, help="override config path")
+    p.add_argument("--no-skill", action="store_true",
+                   help="do not install the compress-and-answer skill")
+    p.add_argument("--skills-dir", default=None,
+                   help="where to install the skill (default: ~/.claude/skills)")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -122,12 +147,15 @@ def main() -> int:
     data["mcpServers"] = servers
 
     rendered = json.dumps(data, indent=2) + "\n"
+    skills_dir = args.skills_dir or default_skills_dir()
 
     if args.dry_run:
         print(f"[dry-run] would write to: {cfg_path}")
         print(f"[dry-run] server entry '{args.name}'"
               + (" (OVERWRITES existing)" if overwriting else " (new)") + ":")
         print(json.dumps({args.name: entry}, indent=2))
+        if not args.no_skill:
+            install_skill(skills_dir, dry_run=True)
         return 0
 
     os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
@@ -145,6 +173,13 @@ def main() -> int:
     print(f"  model:   {model}  (kind={args.model_kind})")
     if not os.path.isdir(os.path.dirname(cfg_path)):
         print("  note: Claude Desktop config dir didn't exist — is the app installed?")
+
+    if not args.no_skill:
+        install_skill(skills_dir, dry_run=False)
+        print("  note: that path is read by Claude Code. For Claude Desktop, also add the skill")
+        print(f"        via Settings -> Capabilities/Skills, pointing at:\n"
+              f"        {os.path.join(PROJECT_DIR, 'skills', 'compress-and-answer')}")
+
     print("\nDone. Restart Claude Desktop for the compress_context tool to appear.")
     return 0
 
